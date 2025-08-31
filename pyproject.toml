@@ -1,0 +1,12 @@
+[project]
+name = "rat-mlx"
+version = "0.1.0"
+description = "Chunk-based RAT sequence mixing (intra-chunk recurrence + inter-chunk attention) in MLX"
+requires-python = ">=3.10"
+dependencies = ["mlx>=0.22", "numpy"]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
