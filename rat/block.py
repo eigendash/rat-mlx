@@ -18,47 +18,44 @@ from __future__ import annotations
 import mlx.core as mx
 import mlx.nn as nn
 
-from .attention import rat_attention
+from .attention import chunk_state_floats, rat_attention
 
 __all__ = ["RATLayer", "SlidingWindowAttention", "chunk_rope", "chunk_rope_cos_sin"]
 
 
 def chunk_rope_cos_sin(n_chunks: int, dim: int, base: float = 10000.0):
-    """Cos/sin tables for RoPE applied at chunk granularity."""
+    """Cos/sin tables of shape ``(n_chunks, dim // 2)`` for chunk-level RoPE."""
     half = dim // 2
     inv = base ** (-mx.arange(half, dtype=mx.float32) / half)
-    pos = mx.arange(n_chunks, dtype=mx.float32)
-    ang = pos[:, None] * inv[None, :]
-    return mx.concatenate([mx.cos(ang), mx.sin(ang)], axis=-1), mx.concatenate(
-        [-mx.sin(ang), mx.cos(ang)], axis=-1
-    )
+    ang = mx.arange(n_chunks, dtype=mx.float32)[:, None] * inv[None, :]
+    return mx.cos(ang), mx.sin(ang)
 
 
 def chunk_rope(x: mx.array, chunk: int) -> mx.array:
     """RoPE whose rotation is indexed by chunk, not by token.
 
-    ``x`` is ``(B, H, T, P)`` and ``T`` must be a multiple of ``chunk``. Every
-    token in a chunk gets the same rotation, which only makes sense for the
-    inter-chunk attention where all positions of a chunk share one summary; we
-    apply it to the queries and to the gated keys uniformly, so it is a relative
-    rotation between chunk indices and cancels for the same-position diagonal
-    term.
+    ``x`` is ``(B, H, T, P)`` with ``T`` a multiple of ``chunk``. Every token in a
+    chunk gets the same rotation, which only makes sense for inter-chunk attention
+    where all positions of a chunk share one summary; because the same rotation is
+    applied to the queries and to the gated keys, only the *relative* chunk index
+    matters, and the same-position diagonal term cancels it entirely.
 
     The paper says "we use RoPE based on chunk indices for inter-chunk attention"
-    (Subsec. 3.1) without giving a rotation convention. This is the standard
-    interleaved-half RoPE with base 10000.
+    (Subsec. 3.1) without fixing a convention. This is half-split RoPE with base
+    10000: the first ``P // 2`` features are rotated as 2-D pairs and the rest are
+    left alone, which is why the norm is preserved.
     """
     B, H, T, P = x.shape
     n_chunks = T // chunk
     cos, sin = chunk_rope_cos_sin(n_chunks, P)
-    # (n_chunks, P) -> (B, H, T, P) by repeating each chunk index `chunk` times.
+    # (n_chunks, P // 2) -> (B, H, T, P // 2) by repeating each chunk index.
     cos = mx.repeat(cos, chunk, axis=0)[None, None]
     sin = mx.repeat(sin, chunk, axis=0)[None, None]
-    x1 = x[..., : P // 2]
-    x2 = x[..., P // 2 : 2 * (P // 2)]
-    # rotate pairs using the half-split convention: out = x * cos + rot(x) * sin
-    rot = mx.concatenate([-x2, x1], axis=-1)
-    return x * cos + rot * sin
+    half = P // 2
+    x1, x2 = x[..., :half], x[..., half : 2 * half]
+    rot1 = x1 * cos - x2 * sin
+    rot2 = x1 * sin + x2 * cos
+    return mx.concatenate([rot1, rot2, x[..., 2 * half :]], axis=-1)
 
 
 class RATLayer(nn.Module):
@@ -127,8 +124,7 @@ class RATLayer(nn.Module):
 
     def state_floats(self, seq_len: int) -> int:
         """Generation state of this layer in floats, for ``seq_len`` tokens."""
-        chunks = seq_len // self.chunk
-        return 2 * (self.d_model + 2 * chunks * self.d_model)
+        return chunk_state_floats(seq_len, self.chunk, self.d_model, self.heads)
 
     def chunk_summary_count(self, seq_len: int) -> int:
         return seq_len // self.chunk

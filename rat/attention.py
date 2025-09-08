@@ -281,16 +281,19 @@ def rat_attention_streaming(
 
 
 def chunk_state_floats(seq_len: int, chunk: int, d_model: int, heads: int = 1) -> int:
-    """Floats of generation state a RAT layer holds per sequence.
+    """Floats of generation state a RAT layer holds on a sequence of ``seq_len``.
 
-    RAT keeps one gated key and one gated value per *finished chunk* (the
-    ``K~_{:,-1}`` / ``V~_{:,-1}`` cache), plus the running chunk's two gated
-    vectors of size ``d_model``. Full attention keeps a key and a value per
-    *token*, i.e. ``2 * d_model`` floats per token, which is the ``chunk = 1``
-    value below. The factor 2 that appears twice is for key and value and for the
-    two gated vectors of the current chunk.
+    RAT caches one gated key and one gated value, each of width ``d_model``, per
+    *finished chunk* -- the ``K~_{:,-1}`` / ``V~_{:,-1}`` memory, exactly the
+    released implementation's ``kcache`` / ``vcache`` of shape
+    ``(B, heads, n_chunks, d_head)``. The chunk in progress overwrites one slot of
+    that same pair, so it adds nothing. Full attention needs a key and a value per
+    token, i.e. ``2 * d_model`` floats per token; a RAT layer with chunk size ``L``
+    needs ``2 * d_model * T / L``, which is ``2 * d_model / L`` per token and does
+    not depend on ``seq_len``.
     """
-    chunks = seq_len // chunk
-    prev = 2 * 2 * chunks * d_model  # finished chunks: k and v summaries
-    running = 2 * d_model  # current chunk's running gated k and v
-    return prev + running
+    if seq_len % chunk != 0:
+        raise ValueError(
+            f"sequence length {seq_len} is not a multiple of chunk size {chunk}"
+        )
+    return 2 * d_model * (seq_len // chunk)

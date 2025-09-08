@@ -292,17 +292,15 @@ def test_unknown_chunk_size_raises():
 def test_state_size_is_independent_of_sequence_length():
     """Per-token state falls as 1 / chunk and never grows with ``T``."""
     d_model = 32
-    for chunk in (1, 4, 16):
-        # 2 * 2 * d_model / chunk + 2 * d_model / T, so the T term is a small
-        # correction: the per-token state is (asymptotically) independent of T.
+    for chunk in (1, 4, 16, 64):
         per_token = [
             chunk_state_floats(T, chunk, d_model) / T for T in (128, 512, 4096)
         ]
-        assert per_token[-1] == pytest.approx(4 * d_model / chunk, rel=0.01)
+        # Exactly 2 * d_model / chunk: one key and one value per chunk, nothing
+        # that depends on the sequence length.
+        assert per_token == [2 * d_model / chunk] * 3
     # chunk = 1 is full attention: one key and one value of width d_model per token.
-    assert chunk_state_floats(1024, 1, d_model) == 2 * d_model * (2 * 1024 + 1)
-    assert chunk_state_floats(1024, 16, d_model) < chunk_state_floats(1024, 1, d_model) / 7
-    # And the per-token cost does not grow with the sequence length.
-    for chunk in (1, 4, 16, 64):
-        a = [chunk_state_floats(T, chunk, d_model) / T for T in (256, 4096)]
-        assert a[1] <= a[0] + 1e-9
+    assert chunk_state_floats(1024, 1, d_model) == 2 * d_model * 1024
+    assert chunk_state_floats(1024, 16, d_model) == 2 * d_model * 64
+    with pytest.raises(ValueError):
+        chunk_state_floats(1000, 16, d_model)
