@@ -187,11 +187,14 @@ def rat_attention(
     # denominator is shared with the inter-chunk branch.
     diag = mx.broadcast_to(vt_h, qh.shape)
 
-    # Online-softmax merge of the two branches (paper Appendix A.1,
-    # merge_last_token_stable). mx.fast does not return a log-sum-exp, so it is
-    # recomputed from the same logits. Masked entries use a large negative additive
-    # constant rather than -inf so that the log-sum-exp and both branch weights
-    # stay finite; a masked entry is then weighted by exp(-1e30), i.e. zero.
+    # Merge the two branches with one softmax over the union of their keys. The
+    # paper's Appendix A.1 does this as an online-softmax update
+    # (``merge_last_token_stable``), which needs an unnormalised numerator for each
+    # branch; doing it as a single denominator is the same arithmetic and it also
+    # removes the failure mode where both branch numerators overflow before the
+    # division. ``inter`` is already the normalised inter-chunk mixture, so the
+    # merged result is just the two mixtures reweighted, with the weights taken
+    # from the log-sum-exp of each branch's logits.
     add_mask = mx.where(keep_all, 0.0, -1e30)  # (T, C+1)
     inter_logits = (qh @ kch.transpose(0, 1, 3, 2)) * scale + add_mask
     inter_lse = mx.logsumexp(inter_logits, axis=-1)  # (B, H, T)
@@ -199,8 +202,9 @@ def rat_attention(
     m = mx.maximum(inter_lse, diag_logits)
     ei = mx.exp(inter_lse - m)
     ed = mx.exp(diag_logits - m)
-    denom = ei + ed
-    out = inter * (ei / denom)[..., None] + diag * (ed / denom)[..., None]
+    ei = ei / (ei + ed)
+    ed = 1.0 - ei
+    out = inter * ei[..., None] + diag * ed[..., None]
     out = out.transpose(0, 2, 1, 3).reshape(B, T, heads * P)
     info = {
         "chunk_summary_k": kchunk,

@@ -304,3 +304,50 @@ def test_state_size_is_independent_of_sequence_length():
     assert chunk_state_floats(1024, 16, d_model) == 2 * d_model * 64
     with pytest.raises(ValueError):
         chunk_state_floats(1000, 16, d_model)
+
+
+def test_merge_stays_finite_when_the_logits_are_large():
+    """A trained model can produce big attention logits; the merge must not overflow.
+
+    Scaling the queries up makes every inter-chunk logit large. The branch weights
+    are differences of log-sum-exp terms, so they are bounded by one and the output
+    stays finite and inside the range of the values.
+    """
+    a = rand_inputs(B=2, T=32, D=16, heads=2, seed=11)
+    big = mx.array(400.0)
+    out, _ = rat_attention(
+        a["z"], a["g"], a["q"] * big, a["k"] * big, a["v"], 8, heads=2
+    )
+    mx.eval(out)
+    assert np.all(np.isfinite(np.array(out)))
+    gv = np.abs(np.array((1.0 - a["g"]) * a["v"])).max(axis=1, keepdims=True)
+    assert np.all(np.abs(np.array(out)) <= np.array(a["z"]) * gv + 1e-4)
+
+
+def test_merge_stays_finite_when_the_logits_are_large():
+    """A trained model can produce big attention logits; the merge must not overflow.
+
+    Scaling queries and keys by 1e4 makes the inter-chunk log-sum-exp ~1e8, so the
+    old merge (which exponentiated the log-sum-exp directly) overflowed to inf and
+    then to nan. The branch weights are differences of log-sum-exp terms, so they
+    are bounded by one, and the output stays finite.
+    """
+    a = rand_inputs(B=2, T=32, D=16, heads=2, seed=11)
+    big = mx.array(10000.0)
+    out, info = rat_attention(
+        a["z"], a["g"], a["q"] * big, a["k"] * big, a["v"], 8, heads=2
+    )
+    mx.eval(out)
+    assert np.all(np.isfinite(np.array(out)))
+    lse = np.array(info["inter_lse"])
+    assert lse[np.isfinite(lse) & (lse < 1e29)].max() > 1e6
+
+    def loss(z, g, q, k, v):
+        out, _ = rat_attention(z, g, q * big, k * big, v, 8, heads=2)
+        return (out**2).sum()
+
+    grads = mx.grad(loss, argnums=(0, 1, 2, 3, 4))(
+        a["z"], a["g"], a["q"], a["k"], a["v"]
+    )
+    for gr in grads:
+        assert np.all(np.isfinite(np.array(gr)))
