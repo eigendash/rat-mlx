@@ -6,9 +6,10 @@ sliding-window attention; ``hybrid=True`` here puts ``SlidingWindowAttention`` o
 layers where ``layer_index % interleave_step == 0`` and ``RATLayer`` elsewhere,
 to match the released implementation's ``sequence_interleave`` backbone.
 
-This is a toy: a few hundred thousand parameters, learned token embeddings, one
-learned positional embedding over chunk indices for inter-chunk attention, and
-no dropout or mixture-of-experts.
+This is a toy: tens of thousands of parameters, learned token embeddings, no
+dropout and no mixture-of-experts. Positional information comes only from the
+chunk-level RoPE inside ``RATLayer`` (or from nothing at all when ``rope=False``,
+which is what the experiment uses -- see the README).
 """
 
 from __future__ import annotations
@@ -33,7 +34,6 @@ class ModelConfig:
     n_layers: int = 4
     heads: int = 1
     chunk: int = 16
-    max_chunks: int = 64
     hybrid: bool = False
     interleave_step: int = 2
     window: int = 32
@@ -77,10 +77,6 @@ class RATLM(nn.Module):
         self.tok_emb = nn.Embedding(cfg.vocab_size, cfg.d_model)
         self.layers = build_layers(cfg)
         self.norm = nn.RMSNorm(cfg.d_model, eps=1e-5)
-        if not cfg.rope:
-            # Learned chunk-index embedding for inter-chunk attention, the
-            # alternative to the paper's chunk-level RoPE.
-            self.chunk_pos = nn.Embedding(cfg.max_chunks, cfg.d_model)
 
     def __call__(self, tokens: mx.array) -> mx.array:
         return self.forward(tokens)
@@ -93,11 +89,13 @@ class RATLM(nn.Module):
         # Weight tying: logits = h @ E^T.
         return h @ self.tok_emb.weight.T
 
-    def loss(self, tokens: mx.array, targets: mx.array, mask: mx.array) -> mx.array:
+    def masked_loss(self, tokens: mx.array, targets: mx.array, mask: mx.array) -> mx.array:
         """Cross-entropy over the masked positions only.
 
         ``targets`` is ``(B, T)`` with -1 where the position is not scored and
-        ``mask`` is the boolean version of that.
+        ``mask`` is the boolean version of that. The name is not ``loss`` because
+        ``mlx.nn.Module`` keeps a ``loss`` attribute for the functional loss it is
+        built for, and assigning to it silently replaces this method.
         """
         logits = self.forward(tokens)
         safe = mx.where(mask, targets, 0)

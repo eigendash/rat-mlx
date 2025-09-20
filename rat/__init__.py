@@ -1,4 +1,4 @@
-"""Chunk-based sequence mixers. See ``rat/attention.py`` for the maths."""
+"""Chunk-based RAT sequence mixing. See ``rat/attention.py`` for the maths."""
 
 from .attention import (
     chunk_state_floats,
@@ -9,14 +9,20 @@ from .attention import (
     rat_attention,
     rat_attention_streaming,
 )
-from .block import RATLayer, SlidingWindowAttention, chunk_rope
+from .block import (
+    RATLayer,
+    SlidingWindowAttention,
+    chunk_rope,
+    chunk_rope_cos_sin,
+)
 from .model import RATLM, ModelConfig, build_layers, count_parameters
 from .task import (
-    InductionBatch,
-    make_induction_batch,
-    n_symbols,
+    Batch,
+    copy_accuracy_by_distance,
+    make_copy_batch,
+    make_recall_batch,
     random_baseline_accuracy,
-    retrieval_accuracy,
+    source_offsets,
 )
 
 __all__ = [
@@ -30,13 +36,15 @@ __all__ = [
     "RATLayer",
     "SlidingWindowAttention",
     "chunk_rope",
+    "chunk_rope_cos_sin",
     "RATLM",
     "ModelConfig",
     "build_layers",
     "count_parameters",
-    "InductionBatch",
-    "make_induction_batch",
-    "n_symbols",
+    "Batch",
+    "copy_accuracy_by_distance",
+    "make_copy_batch",
+    "make_recall_batch",
     "random_baseline_accuracy",
-    "retrieval_accuracy",
+    "source_offsets",
 ]

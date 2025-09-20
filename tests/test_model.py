@@ -15,7 +15,7 @@ def test_model_forward_loss_and_initial_entropy():
     targets = mx.random.randint(1, 17, (3, 32))
     mask = mx.ones((3, 32), dtype=mx.bool_)
     logits = model(tokens)
-    loss = model.loss(tokens, targets, mask)
+    loss = model.masked_loss(tokens, targets, mask)
     mx.eval(logits, loss)
     assert logits.shape == (3, 32, 17)
     assert np.isfinite(float(loss))
@@ -47,7 +47,7 @@ def test_model_loss_ignores_unmasked_positions():
     targets = mx.random.randint(1, 17, (2, 16))
     mask = mx.zeros((2, 16), dtype=mx.bool_)
     mask[:, 3] = True
-    loss = model.loss(tokens, targets, mask)
+    loss = model.masked_loss(tokens, targets, mask)
     mx.eval(loss)
     logp = mx.log(mx.softmax(model(tokens), axis=-1))
     picked = np.array(logp)[np.arange(2), 3, np.array(targets)[:, 3]]
