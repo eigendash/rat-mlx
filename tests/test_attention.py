@@ -327,10 +327,12 @@ def test_merge_stays_finite_when_the_logits_are_large():
 def test_merge_stays_finite_when_the_logits_are_large():
     """A trained model can produce big attention logits; the merge must not overflow.
 
-    Scaling queries and keys by 1e4 makes the inter-chunk log-sum-exp ~1e8, so the
-    old merge (which exponentiated the log-sum-exp directly) overflowed to inf and
-    then to nan. The branch weights are differences of log-sum-exp terms, so they
-    are bounded by one, and the output stays finite.
+    Scaling queries and keys by 1e4 makes the inter-chunk dot products ~1e8, far
+    outside float32's comfortable range: an earlier version of this merge produced
+    inf and then nan in the backward pass at exactly that point, which showed up as
+    the chunk-size sweep diverging for chunk=4 and chunk=16. The dot products are
+    clamped and the mask is a finite constant, so the log-sum-exp saturates around
+    the clamp and every value and gradient stays finite.
     """
     a = rand_inputs(B=2, T=32, D=16, heads=2, seed=11)
     big = mx.array(10000.0)
@@ -340,7 +342,8 @@ def test_merge_stays_finite_when_the_logits_are_large():
     mx.eval(out)
     assert np.all(np.isfinite(np.array(out)))
     lse = np.array(info["inter_lse"])
-    assert lse[np.isfinite(lse) & (lse < 1e29)].max() > 1e6
+    assert np.all(np.isfinite(lse))
+    assert np.abs(lse).max() < 2e4  # saturated at the clamp, not at inf
 
     def loss(z, g, q, k, v):
         out, _ = rat_attention(z, g, q * big, k * big, v, 8, heads=2)

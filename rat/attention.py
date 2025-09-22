@@ -162,49 +162,56 @@ def rat_attention(
     kch = kchunk.reshape(B, C, heads, P).transpose(0, 2, 1, 3)
     vch = vchunk.reshape(B, C, heads, P).transpose(0, 2, 1, 3)
 
-    # keep[b] is the boolean "chunk b may be attended to" mask, evaluated per
-    # query row. One extra always-masked wildcard slot (zero key and value) is
-    # appended so that first-chunk queries, which have no visible chunk, still
-    # see one entry; the fused kernel returns a non-finite row when nothing at all
-    # is visible. The wildcard is never visible and its merge weight is clamped to
-    # zero below, so it cannot change a result -- it only keeps values and
-    # gradients finite. See the README.
+    # keep_prev[t, b] is the boolean "chunk b is visible to the query at t" mask.
+    # Queries in the first chunk have no visible chunk at all and a fully masked
+    # softmax row has no defined value, so an always-masked wildcard column (a zero
+    # key and value) is appended: it gives every row a finite entry to normalise
+    # against without ever carrying weight. Following the released implementation,
+    # only chunks *before* the query's own chunk are visible here -- a query must not
+    # see a summary that contains its own future. The same-position contribution
+    # comes from the diagonal branch below.
     keep_prev = (mx.arange(T) // chunk)[:, None] > mx.arange(C)[None, :]  # (T, C)
     keep_all = mx.concatenate([keep_prev, mx.zeros((T, 1), dtype=mx.bool_)], axis=1)
     kch = mx.concatenate([kch, mx.zeros_like(kch[:, :, :1, :])], axis=2)
     vch = mx.concatenate([vch, mx.zeros_like(vch[:, :, :1, :])], axis=2)
+    visible = keep_prev.any(axis=1)  # (T,), True when a chunk is visible
 
-    inter = mx.fast.scaled_dot_product_attention(
-        qh, kch, vch, scale=scale, mask=keep_all[None, None, :, :]
-    )  # (B, H, T, P)
-
-    # Diagonal (same-position) contribution of the chunk in progress: query ``l``
-    # of chunk ``c`` scores the gated key at that same position, ``k~_{c,l}``.
+    # Diagonal (same-position) contribution of the chunk in progress: query ``l`` of
+    # chunk ``c`` scores the gated key at that same position, ``k~_{c,l}``, and its
+    # numerator is the gated value itself.
     kt_h = kt.reshape(B, T, heads, P).transpose(0, 2, 1, 3)
     vt_h = vt.reshape(B, T, heads, P).transpose(0, 2, 1, 3)
     diag_logits = (qh * kt_h).sum(-1) * scale  # (B, H, T)
-    # The diagonal entry's numerator is the gated value itself; only the softmax
-    # denominator is shared with the inter-chunk branch.
-    diag = mx.broadcast_to(vt_h, qh.shape)
 
     # Merge the two branches with one softmax over the union of their keys. The
-    # paper's Appendix A.1 does this as an online-softmax update
-    # (``merge_last_token_stable``), which needs an unnormalised numerator for each
-    # branch; doing it as a single denominator is the same arithmetic and it also
-    # removes the failure mode where both branch numerators overflow before the
-    # division. ``inter`` is already the normalised inter-chunk mixture, so the
-    # merged result is just the two mixtures reweighted, with the weights taken
-    # from the log-sum-exp of each branch's logits.
-    add_mask = mx.where(keep_all, 0.0, -1e30)  # (T, C+1)
-    inter_logits = (qh @ kch.transpose(0, 1, 3, 2)) * scale + add_mask
-    inter_lse = mx.logsumexp(inter_logits, axis=-1)  # (B, H, T)
+    # paper's Appendix A.1 writes this as an online-softmax update
+    # (``merge_last_token_stable``); a single normaliser over the same logits is the
+    # same arithmetic and needs no unnormalised numerators.
+    #
+    # Dot products are clamped before use. A trained model's query/key magnitudes
+    # grow until the products approach float32's range; adding a mask constant to
+    # them then loses the keep/mask distinction entirely, and ``inf - inf`` in the
+    # softmax's max-subtraction produces nan in the backward pass. The clamp bounds
+    # both without changing which entry is largest, so argmax-style attention is
+    # unaffected while the arithmetic stays finite. Heads are one ``P``-vector
+    # apart, so a bound of 1e4 leaves the ordering untouched for real inputs.
+    limit = 1e4
+    dot = (qh @ kch.transpose(0, 1, 3, 2)) * scale
+    dot = mx.clip(dot, -limit, limit)
+    inter_scores = mx.where(keep_all[None, None, :, :], dot, -limit)
+    inter_lse = mx.logsumexp(inter_scores, axis=-1)  # (B, H, T)
+    # The wildcard column guarantees at least one finite score per row, so this is
+    # never -inf; for a first-chunk row it is -limit.
+    inter = mx.softmax(inter_scores, axis=-1) @ vch  # (B, H, T, P)
 
+    # Branch weights. Both offsets are <= 0, so neither exponential overflows, and
+    # a first-chunk row gets ``exp(-limit) -> 0`` on the inter branch.
     m = mx.maximum(inter_lse, diag_logits)
     ei = mx.exp(inter_lse - m)
     ed = mx.exp(diag_logits - m)
-    ei = ei / (ei + ed)
-    ed = 1.0 - ei
-    out = inter * ei[..., None] + diag * ed[..., None]
+    weight = ei / (ei + ed)
+    inter = mx.where(visible[None, None, :, None], inter, 0.0)
+    out = inter * weight[..., None] + vt_h * (1.0 - weight)[..., None]
     out = out.transpose(0, 2, 1, 3).reshape(B, T, heads * P)
     info = {
         "chunk_summary_k": kchunk,
