@@ -1,0 +1,34 @@
+RAT chunk-size sweep on long-range copy
+task: second half of a 512-symbol sequence repeats the first half,
+scored on the second half only; vocabulary 8
+model: 2 layers, d_model 64, 4 heads, 41792 parameters
+training: 600 steps, batch 32, AdamW lr 0.001 cosine, seed 0
+constant-answer baseline accuracy: 0.131
+held-out copy accuracy of the same architecture at chunk 1: 0.875
+
+configuration               c hybrid     loss     acc   acc@2T  state/tok  params
+---------------------------------------------------------------------------------
+c=1 (attention)             1  False   0.3413   0.875    0.880      256.0   41792
+c=4                         4  False   0.3310   0.875    0.880       64.0   41792
+c=16                       16  False   0.2454   0.855    0.876       16.0   41792
+c=64                       64  False   0.1830   0.828    0.854        4.0   41792
+c=512 (=T, pure RNN)      512  False   0.1562   0.828    0.793        0.5   41792
+c=16 + local attention     16   True   0.2985   0.869    0.880       16.0   37632
+
+loss is the mean cross-entropy over the scored (second-half) positions at
+sequence length 512; acc is exact match at that length; acc@2T is
+exact match at sequence length 1024 after training only at 512
+(n/a means 1024 is not a multiple of that chunk size); state/tok is
+the generation-time key/value cache of the whole model divided by the
+sequence length: 2 * d_model / chunk per RAT layer, 2 * d_model / 32 per
+local-attention layer (window 32).
+
+accuracy by source distance: every scored token reads exactly
+ T/2 = 256 positions back, so only the highest bucket is
+ populated:
+  c=1 (attention)         256+: 0.875
+  c=4                     256+: 0.875
+  c=16                    256+: 0.855
+  c=64                    256+: 0.828
+  c=512 (=T, pure RNN)    256+: 0.828
+  c=16 + local attention  256+: 0.869

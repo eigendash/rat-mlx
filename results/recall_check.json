@@ -1,0 +1,93 @@
+{
+  "task": {
+    "name": "multi-pair associative recall",
+    "seq_len": 256,
+    "n_key": 16,
+    "n_pairs": 16,
+    "n_queries": 8
+  },
+  "setup": {
+    "d_model": 64,
+    "n_layers": 4,
+    "heads": 4,
+    "batch": 32,
+    "steps": 400,
+    "lr": 0.003,
+    "seed": 0,
+    "constant_answer_baseline_accuracy": 0.08072916666666667
+  },
+  "results": [
+    {
+      "label": "c=1 (attention)",
+      "chunk": 1,
+      "hybrid": false,
+      "params": 84608,
+      "state_floats_per_token": 512.0,
+      "train_loss_final": 2.773506486415863,
+      "held_out_loss": 2.7735958894093833,
+      "accuracy": 0.06380208333333333,
+      "seconds": 20.790843963623047,
+      "baseline_accuracy": 0.08072916666666667
+    },
+    {
+      "label": "c=4",
+      "chunk": 4,
+      "hybrid": false,
+      "params": 84608,
+      "state_floats_per_token": 128.0,
+      "train_loss_final": 2.7733606934547423,
+      "held_out_loss": 2.7732362747192383,
+      "accuracy": 0.06380208333333333,
+      "seconds": 8.998865842819214,
+      "baseline_accuracy": 0.08072916666666667
+    },
+    {
+      "label": "c=16",
+      "chunk": 16,
+      "hybrid": false,
+      "params": 84608,
+      "state_floats_per_token": 32.0,
+      "train_loss_final": 2.7733506679534914,
+      "held_out_loss": 2.773222804069519,
+      "accuracy": 0.064453125,
+      "seconds": 10.588580131530762,
+      "baseline_accuracy": 0.08072916666666667
+    },
+    {
+      "label": "c=64",
+      "chunk": 64,
+      "hybrid": false,
+      "params": 84608,
+      "state_floats_per_token": 8.0,
+      "train_loss_final": 2.7732433915138244,
+      "held_out_loss": 2.7732457717259726,
+      "accuracy": 0.064453125,
+      "seconds": 27.43080186843872,
+      "baseline_accuracy": 0.08072916666666667
+    },
+    {
+      "label": "c=256 (=T, pure RNN)",
+      "chunk": 256,
+      "hybrid": false,
+      "params": 84608,
+      "state_floats_per_token": 2.0,
+      "train_loss_final": 2.773281192779541,
+      "held_out_loss": 2.7732999324798584,
+      "accuracy": 0.06315104166666667,
+      "seconds": 109.43470478057861,
+      "baseline_accuracy": 0.08072916666666667
+    },
+    {
+      "label": "c=16 + local attention",
+      "chunk": 16,
+      "hybrid": true,
+      "params": 76288,
+      "state_floats_per_token": 48.0,
+      "train_loss_final": 2.7736886143684387,
+      "held_out_loss": 2.7732291221618652,
+      "accuracy": 0.06770833333333333,
+      "seconds": 9.725589990615845,
+      "baseline_accuracy": 0.08072916666666667
+    }
+  ]
+}

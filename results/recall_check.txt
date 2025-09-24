@@ -1,0 +1,17 @@
+RAT chunk-size check on associative recall
+16 planted key/value pairs, filler, 8 queries; sequence length 256, vocabulary 33
+model: 4 layers, d_model 64, 4 heads; 400 steps, batch 32, AdamW lr 0.003 cosine, seed 0
+constant-answer baseline accuracy: 0.081
+
+configuration               c hybrid  held-out loss  accuracy  state/tok
+------------------------------------------------------------------------
+c=1 (attention)             1  False         2.7736     0.064      512.0
+c=4                         4  False         2.7732     0.064      128.0
+c=16                       16  False         2.7732     0.064       32.0
+c=64                       64  False         2.7732     0.064        8.0
+c=256 (=T, pure RNN)      256  False         2.7733     0.063        2.0
+c=16 + local attention     16   True         2.7732     0.068       48.0
+
+Every configuration sits on the baseline: this task is not learnable by
+these models at this scale, so the numbers say nothing about the chunk-size
+trade-off. Recorded as a negative result.

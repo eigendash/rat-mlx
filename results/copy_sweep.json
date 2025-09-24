@@ -1,0 +1,239 @@
+{
+  "task": {
+    "name": "long-range copy (second half repeats the first half)",
+    "seq_len": 512,
+    "eval_len": 1024,
+    "n_symbols": 8
+  },
+  "setup": {
+    "d_model": 64,
+    "n_layers": 2,
+    "heads": 4,
+    "batch": 32,
+    "steps": 600,
+    "lr": 0.001,
+    "seed": 0,
+    "window": 32,
+    "optimizer": "AdamW, cosine decay, grad-norm clip 1.0",
+    "constant_answer_baseline_accuracy": 0.130828857421875,
+    "chunk1_accuracy": 0.874664306640625
+  },
+  "results": [
+    {
+      "label": "c=1 (attention)",
+      "chunk": 1,
+      "hybrid": false,
+      "params": 41792,
+      "state_floats_per_token": 256.0,
+      "state_floats_per_token_long": 256.0,
+      "train_loss_final": 0.3432593002915382,
+      "held_out": {
+        "train_len": {
+          "loss": 0.34128928929567337,
+          "accuracy": 0.874664306640625,
+          "accuracy_by_source_distance": {
+            "0-16": NaN,
+            "16-64": NaN,
+            "64-256": NaN,
+            "256+": 0.874664306640625
+          }
+        },
+        "double_len": {
+          "loss": 0.33229105174541473,
+          "accuracy": 0.88006591796875,
+          "accuracy_by_source_distance": {
+            "0-16": NaN,
+            "16-64": NaN,
+            "64-256": NaN,
+            "256+": 0.88006591796875
+          }
+        }
+      },
+      "diverged": false,
+      "lr": 0.001,
+      "seconds": 50.81953191757202,
+      "attempt": 1,
+      "baseline_accuracy": 0.130828857421875
+    },
+    {
+      "label": "c=4",
+      "chunk": 4,
+      "hybrid": false,
+      "params": 41792,
+      "state_floats_per_token": 64.0,
+      "state_floats_per_token_long": 64.0,
+      "train_loss_final": 0.3332282692193985,
+      "held_out": {
+        "train_len": {
+          "loss": 0.3309720456600189,
+          "accuracy": 0.874664306640625,
+          "accuracy_by_source_distance": {
+            "0-16": NaN,
+            "16-64": NaN,
+            "64-256": NaN,
+            "256+": 0.874664306640625
+          }
+        },
+        "double_len": {
+          "loss": 0.32761378586292267,
+          "accuracy": 0.88006591796875,
+          "accuracy_by_source_distance": {
+            "0-16": NaN,
+            "16-64": NaN,
+            "64-256": NaN,
+            "256+": 0.88006591796875
+          }
+        }
+      },
+      "diverged": false,
+      "lr": 0.001,
+      "seconds": 21.43050193786621,
+      "attempt": 1,
+      "baseline_accuracy": 0.130828857421875
+    },
+    {
+      "label": "c=16",
+      "chunk": 16,
+      "hybrid": false,
+      "params": 41792,
+      "state_floats_per_token": 16.0,
+      "state_floats_per_token_long": 16.0,
+      "train_loss_final": 0.2465536892414093,
+      "held_out": {
+        "train_len": {
+          "loss": 0.24540400877594948,
+          "accuracy": 0.85504150390625,
+          "accuracy_by_source_distance": {
+            "0-16": NaN,
+            "16-64": NaN,
+            "64-256": NaN,
+            "256+": 0.85504150390625
+          }
+        },
+        "double_len": {
+          "loss": 0.2767431288957596,
+          "accuracy": 0.87567138671875,
+          "accuracy_by_source_distance": {
+            "0-16": NaN,
+            "16-64": NaN,
+            "64-256": NaN,
+            "256+": 0.87567138671875
+          }
+        }
+      },
+      "diverged": false,
+      "lr": 0.001,
+      "seconds": 19.702778100967407,
+      "attempt": 1,
+      "baseline_accuracy": 0.130828857421875
+    },
+    {
+      "label": "c=64",
+      "chunk": 64,
+      "hybrid": false,
+      "params": 41792,
+      "state_floats_per_token": 4.0,
+      "state_floats_per_token_long": 4.0,
+      "train_loss_final": 0.1831148758530617,
+      "held_out": {
+        "train_len": {
+          "loss": 0.18298807367682457,
+          "accuracy": 0.82794189453125,
+          "accuracy_by_source_distance": {
+            "0-16": NaN,
+            "16-64": NaN,
+            "64-256": NaN,
+            "256+": 0.82794189453125
+          }
+        },
+        "double_len": {
+          "loss": 0.22511651366949081,
+          "accuracy": 0.854461669921875,
+          "accuracy_by_source_distance": {
+            "0-16": NaN,
+            "16-64": NaN,
+            "64-256": NaN,
+            "256+": 0.854461669921875
+          }
+        }
+      },
+      "diverged": false,
+      "lr": 0.001,
+      "seconds": 46.249876976013184,
+      "attempt": 1,
+      "baseline_accuracy": 0.130828857421875
+    },
+    {
+      "label": "c=512 (=T, pure RNN)",
+      "chunk": 512,
+      "hybrid": false,
+      "params": 41792,
+      "state_floats_per_token": 0.5,
+      "state_floats_per_token_long": 0.5,
+      "train_loss_final": 0.15700892433524133,
+      "held_out": {
+        "train_len": {
+          "loss": 0.1561579592525959,
+          "accuracy": 0.827972412109375,
+          "accuracy_by_source_distance": {
+            "0-16": NaN,
+            "16-64": NaN,
+            "64-256": NaN,
+            "256+": 0.827972412109375
+          }
+        },
+        "double_len": {
+          "loss": 0.6118812561035156,
+          "accuracy": 0.792694091796875,
+          "accuracy_by_source_distance": {
+            "0-16": NaN,
+            "16-64": NaN,
+            "64-256": NaN,
+            "256+": 0.792694091796875
+          }
+        }
+      },
+      "diverged": false,
+      "lr": 0.001,
+      "seconds": 287.9895420074463,
+      "attempt": 1,
+      "baseline_accuracy": 0.130828857421875
+    },
+    {
+      "label": "c=16 + local attention",
+      "chunk": 16,
+      "hybrid": true,
+      "params": 37632,
+      "state_floats_per_token": 16.0,
+      "state_floats_per_token_long": 12.0,
+      "train_loss_final": 0.2991842463612556,
+      "held_out": {
+        "train_len": {
+          "loss": 0.2985135316848755,
+          "accuracy": 0.868682861328125,
+          "accuracy_by_source_distance": {
+            "0-16": NaN,
+            "16-64": NaN,
+            "64-256": NaN,
+            "256+": 0.868682861328125
+          }
+        },
+        "double_len": {
+          "loss": 0.3042442500591278,
+          "accuracy": 0.87982177734375,
+          "accuracy_by_source_distance": {
+            "0-16": NaN,
+            "16-64": NaN,
+            "64-256": NaN,
+            "256+": 0.87982177734375
+          }
+        }
+      },
+      "diverged": false,
+      "lr": 0.001,
+      "seconds": 21.022779941558838,
+      "attempt": 1,
+      "baseline_accuracy": 0.130828857421875
+    }
+  ]
+}
