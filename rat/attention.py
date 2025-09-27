@@ -189,13 +189,13 @@ def rat_attention(
     # same arithmetic and needs no unnormalised numerators.
     #
     # Dot products are clamped before use. A trained model's query/key magnitudes
-    # grow until the products approach float32's range; adding a mask constant to
-    # them then loses the keep/mask distinction entirely, and ``inf - inf`` in the
-    # softmax's max-subtraction produces nan in the backward pass. The clamp bounds
-    # both without changing which entry is largest, so argmax-style attention is
-    # unaffected while the arithmetic stays finite. Heads are one ``P``-vector
-    # apart, so a bound of 1e4 leaves the ordering untouched for real inputs.
-    limit = 1e4
+    # grow, and once the products exceed a few hundred the softmax saturates hard
+    # enough that its backward pass overflows: the branch weights then become inf/inf
+    # and the parameters go to nan a step or two later. The clamp bounds the scores
+    # without changing which entry is largest, so argmax-style attention is unaffected
+    # while the arithmetic stays finite. 60 is just above the ~50 reached by
+    # independent unit-scale vectors of this width, so genuine ranking survives.
+    limit = 60.0
     dot = (qh @ kch.transpose(0, 1, 3, 2)) * scale
     dot = mx.clip(dot, -limit, limit)
     inter_scores = mx.where(keep_all[None, None, :, :], dot, -limit)

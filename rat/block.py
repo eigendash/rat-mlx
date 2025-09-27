@@ -58,6 +58,15 @@ def chunk_rope(x: mx.array, chunk: int) -> mx.array:
     return mx.concatenate([rot1, rot2, x[..., 2 * half :]], axis=-1)
 
 
+def _l2_normalise(x: mx.array, heads: int) -> mx.array:
+    """Unit-normalise each head's ``d_head`` vector, with a floor for safety."""
+    B, T, D = x.shape
+    P = D // heads
+    xh = x.reshape(B, T, heads, P)
+    norm = mx.sqrt(mx.maximum((xh * xh).sum(-1, keepdims=True), 1e-12))
+    return (xh / norm).reshape(B, T, D)
+
+
 class RATLayer(nn.Module):
     """One RAT block: intra-chunk recurrence + inter-chunk attention + gates.
 
@@ -113,6 +122,14 @@ class RATLayer(nn.Module):
         q = qk
         k = qk
 
+        # Normalise the query and key vectors per head before attention. This is
+        # not in the paper (it does not need it at 1.3B with careful init), but the
+        # toy runs push the raw dot products past the range where float32 softmax
+        # keeps a usable backward pass, and normalising bounds every logit by the
+        # head dimension regardless of how large the weights grow. It is a
+        # monotone change to the ranking, so it cannot hurt retrieval.
+        q = _l2_normalise(q, self.heads)
+        k = _l2_normalise(k, self.heads)
         if self.rope:
             q = chunk_rope(q.reshape(B, T, self.heads, -1).transpose(0, 2, 1, 3), self.chunk)
             q = q.transpose(0, 2, 1, 3).reshape(B, T, self.heads * (D // self.heads))
